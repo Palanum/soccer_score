@@ -62,3 +62,7 @@ Thumbs.db
 # Vercel
 # =====================
 .vercel
+
+# Postman
+.postman/
+postman/
