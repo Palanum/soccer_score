@@ -1,7 +1,7 @@
-import { Fixture } from "../types/fixture";
-import { isLiveMatch } from "../utils/isLive";
+import { Fixture, League } from "../types/type";
+import { isLiveMatch } from "./isLive";
 
-export function mapFixture(f: any): Fixture {
+function mapFixture(f: any): Fixture {
   return {
     id: f.fixture.id,
     date: f.fixture.date,
@@ -25,3 +25,12 @@ export function mapFixture(f: any): Fixture {
     score: f.score, // ✅ required by interface
   };
 }
+function mapLeague(l: any): League {
+  return {
+    id: l.league.id,
+    name: l.league.name,
+    country: l.country.name,
+    season: l.seasons.find((s: any) => s.current)?.year,
+  };
+}
+export {mapFixture, mapLeague }

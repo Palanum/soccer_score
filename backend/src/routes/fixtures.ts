@@ -3,8 +3,8 @@ import { Router, Request, Response } from 'express';
 import { apiFootball } from '../lib/apiFootball';
 import { asyncHandler } from '../middlewares/asyncHandler';
 import { isLiveMatch } from '../utils/isLive';
-import { Fixture } from '../types/fixture';
-import { mapFixture } from '../utils/mapFixture';
+import { Fixture } from '../types/type';
+import { mapFixture } from '../utils/mapingType';
 const router = Router();
 
 /**

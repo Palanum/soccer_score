@@ -1,23 +1,11 @@
-import { apiFootball } from '../lib/apiFootball';
+import { apiFootball } from "../lib/apiFootball";
+import { League } from "../types/type";
+import { mapLeague } from "../utils/mapingType";
 
-export interface LeagueInfo {
-  id: number;
-  name: string;
-  country: string;
-  season: number;
-}
-
-export async function getLeagues(): Promise<LeagueInfo[]> {
-  const res = await apiFootball.get('/leagues', {
-    params: {
-      current: true,
-    },
+export async function getLeagues(): Promise<League[]> {
+  const res = await apiFootball.get("/leagues", {
+    params: { current: true },
   });
 
-  return res.data.response.map((l: any) => ({
-    id: l.league.id,
-    name: l.league.name,
-    country: l.country.name,
-    season: l.seasons.find((s: any) => s.current)?.year,
-  }));
+  return res.data.response.map(mapLeague);
 }

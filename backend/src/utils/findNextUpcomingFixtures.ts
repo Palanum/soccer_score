@@ -1,6 +1,6 @@
 import { apiFootball } from "../lib/apiFootball";
-import { Fixture } from "../types/fixture";
-import { mapFixture } from "./mapFixture";
+import { Fixture } from "../types/type";
+import { mapFixture } from "./mapingType";
 
 export async function findNextUpcomingFixtures() {
   const today = new Date().toISOString().slice(0, 10);
