@@ -58,7 +58,7 @@ io.on("connection", (socket) => {
   });
 });
 
-startLiveSocket(io);
+// startLiveSocket(io);
 
 
 app.listen(4000, () => {

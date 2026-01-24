@@ -6,7 +6,7 @@ const router = Router();
 
 router.get(
   '/',
-  asyncHandler(async (_req: Request, res: Response) => {
+  asyncHandler(async (_req, res) => {
     const data = await findNextUpcomingFixtures();
     res.json(data);
   })

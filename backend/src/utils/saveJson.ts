@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 export function saveJson(filename: string, data: unknown) {
-  const dir = path.join(process.cwd(), 'data');
+  const dir = path.join(process.cwd(), 'testdata');
 
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir);

@@ -19,25 +19,23 @@ const router = Router();
 
 router.get(
   '/',
-  asyncHandler(async (req: Request, res: Response) => {
+  asyncHandler(async (req, res) => {
     const { league, season, date, live, team } = req.query;
 
     const params: Record<string, any> = {};
 
-    if (league) params.league = league;
-    if (season) params.season = season;
-    if (date) params.date = date;
-    if (team) params.team = team;
+    if (league) params.league = Number(league);
+    if (season) params.season = Number(season);
+    if (team) params.team = Number(team);
+    if (date) params.date = String(date);
 
-    // live=true → API-Football uses "live=all"
     if (live === 'true') {
       params.live = 'all';
     }
 
     const { data } = await apiFootball.get('/fixtures', { params });
 
-    
-const fixtures: Fixture[] = data.response.map(mapFixture);
+    const fixtures: Fixture[] = data.response.map(mapFixture);
 
     res.json({
       count: fixtures.length,
@@ -45,5 +43,6 @@ const fixtures: Fixture[] = data.response.map(mapFixture);
     });
   })
 );
+
 
 export default router;
