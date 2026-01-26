@@ -1,32 +1,18 @@
-import { Router } from 'express';
-import { apiFootball } from '../lib/apiFootball';
-import { asyncHandler } from '../middlewares/asyncHandler';
+// backend/src/routes/leagues.ts
+import express, { Request, Response, Router } from 'express';
+import * as footballAPI from '../lib/apiFootball';
+const router: Router = express.Router();
 
-const router = Router();
-
-/**
- * GET /api/leagues
- * ?season=
- */
-router.get(
-  "/",
-  asyncHandler(async (req, res) => {
-    const response = await apiFootball.get("/leagues", {
-      params: { current: true },
+router.get('/leagues', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await footballAPI.getLeagues();
+    res.json(data);
+  } catch (error) {
+    console.error('Error in /leagues route:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch leagues',
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
-
-    const data = response.data.response;
-
-    const leagues = data.map((l: any) => ({
-      id: l.league.id,
-      name: l.league.name,
-      type: l.league.type, // League | Cup | Playoff
-      country: l.country.name,
-      logo: l.league.logo,
-    }));
-
-    res.json(leagues);
-  })
-);
-
+  }
+});
 export default router;

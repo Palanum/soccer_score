@@ -1,47 +1,183 @@
-import { Server } from "socket.io";
-import { apiFootball } from "../lib/apiFootball";
-import { isLiveMatch } from "../utils/isLive";
+// backend/src/services/socketService.ts
 
-let lastPayload = "";
+import { Server as HTTPServer } from 'http';
+import { Server, Socket } from 'socket.io';
+import {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  InterServerEvents,
+  SocketData,
+} from '../types/socket.types';
+import * as footballAPI from '../lib/apiFootball';
+import { Match } from '../types/football.types';
 
-export const startLiveSocket = (io: Server) => {
-  setInterval(async () => {
-    try {
-      const { data } = await apiFootball.get("/fixtures", {
-        params: { live: "all" }
+type SocketServer = Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>;
+
+type TypedSocket = Socket<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>;
+
+class SocketService {
+  private io: SocketServer | null = null;
+  private liveMatchInterval: NodeJS.Timeout | null = null;
+  private fixtureIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private subscribedClients: Set<string> = new Set();
+
+  initialize(httpServer: HTTPServer): SocketServer {
+    this.io = new Server(httpServer, {
+      cors: {
+        origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+        methods: ['GET', 'POST'],
+        credentials: true,
+      },
+      pingTimeout: 60000,
+      pingInterval: 25000,
+    });
+
+    this.setupEventHandlers();
+    this.startLiveMatchUpdates();
+
+    return this.io;
+  }
+
+  private setupEventHandlers(): void {
+    if (!this.io) return;
+
+    this.io.on('connection', (socket: TypedSocket) => {
+      console.log(`✓ Client connected: ${socket.id}`);
+
+      // Send welcome message
+      socket.emit('connected', {
+        message: 'Connected to Football Live Score Server',
+        connectedClients: this.io!.sockets.sockets.size,
       });
 
-      const fixtures = data.response.map((f: any) => ({
-        id: f.fixture.id,
-        timestamp: f.fixture.timestamp,
-        status: f.fixture.status.short,
-        live: isLiveMatch(f.fixture.status.short),
+      // Handle live matches subscription
+      socket.on('subscribeToLive', () => {
+        this.subscribedClients.add(socket.id);
+        console.log(`Client ${socket.id} subscribed to live updates`);
+        
+        // Send current live matches immediately
+        this.sendLiveMatches();
+      });
 
-        league: {
-          id: f.league.id,
-          name: f.league.name,
-          season: f.league.season,
-        },
+      socket.on('unsubscribeFromLive', () => {
+        this.subscribedClients.delete(socket.id);
+        console.log(`Client ${socket.id} unsubscribed from live updates`);
+      });
 
-        teams: {
-          home: f.teams.home.name,
-          away: f.teams.away.name,
-        },
+      // Handle fixtures request
+      socket.on('requestFixtures', async (date: string) => {
+        try {
+          const data = await footballAPI.getFixturesByDate(date);
+          socket.emit('fixturesUpdate', {
+            date,
+            matches: data.response,
+          });
+        } catch (error) {
+          socket.emit('error', {
+            message: 'Failed to fetch fixtures',
+          });
+        }
+      });
 
-        goals: f.goals,
-        score: f.score,
-      }));
+      // Handle leagues request
+      socket.on('requestLeagues', async () => {
+        try {
+          const data = await footballAPI.getLeagues();
+          socket.emit('leaguesUpdate', data.response);
+        } catch (error) {
+          socket.emit('error', {
+            message: 'Failed to fetch leagues',
+          });
+        }
+      });
 
-      const payload = JSON.stringify(fixtures);
+      // Handle disconnection
+      socket.on('disconnect', () => {
+        this.subscribedClients.delete(socket.id);
+        console.log(`✗ Client disconnected: ${socket.id}`);
+        console.log(`Active connections: ${this.io!.sockets.sockets.size}`);
+      });
+    });
+  }
 
-      // emit only if changed (IMPORTANT)
-      if (payload !== lastPayload) {
-        lastPayload = payload;
-        io.emit("live_fixtures", fixtures);
+  // Fetch and broadcast live matches every 60 seconds
+  private startLiveMatchUpdates(): void {
+    // Initial fetch
+    this.sendLiveMatches();
+
+    // Set up interval for updates
+    this.liveMatchInterval = setInterval(() => {
+      if (this.subscribedClients.size > 0) {
+        this.sendLiveMatches();
+      } else {
+        console.log('No clients subscribed, skipping live match update');
       }
+    }, 600); // 60 seconds
 
-    } catch (err: any) {
-      console.error("Live socket error:", err.message);
+    console.log('✓ Live match updates started (60s interval)');
+  }
+
+  private async sendLiveMatches(): Promise<void> {
+    try {
+      const data = await footballAPI.getLiveMatches();
+      const matches = data.response;
+
+      if (this.io && this.subscribedClients.size > 0) {
+        this.io.emit('liveMatchesUpdate', matches);
+        console.log(
+          `✓ Broadcast ${matches.length} live matches to ${this.subscribedClients.size} clients`
+        );
+      }
+    } catch (error) {
+      console.error('Error fetching live matches:', error);
+      if (this.io) {
+        this.io.emit('error', {
+          message: 'Failed to fetch live matches',
+        });
+      }
     }
-  }, 15000); // every 15s (safe for API limits)
-};
+  }
+
+  // Broadcast fixtures update for a specific date
+  public async broadcastFixtures(date: string): Promise<void> {
+    if (!this.io) return;
+
+    try {
+      const data = await footballAPI.getFixturesByDate(date);
+      this.io.emit('fixturesUpdate', {
+        date,
+        matches: data.response,
+      });
+      console.log(`✓ Broadcast fixtures for ${date}`);
+    } catch (error) {
+      console.error('Error broadcasting fixtures:', error);
+    }
+  }
+
+  // Get connected clients count
+  public getConnectedClientsCount(): number {
+    return this.io ? this.io.sockets.sockets.size : 0;
+  }
+
+  // Cleanup
+  public cleanup(): void {
+    if (this.liveMatchInterval) {
+      clearInterval(this.liveMatchInterval);
+    }
+    this.fixtureIntervals.forEach((interval) => clearInterval(interval));
+    this.fixtureIntervals.clear();
+    this.subscribedClients.clear();
+  }
+}
+
+export default new SocketService();

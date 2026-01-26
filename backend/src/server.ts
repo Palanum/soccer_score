@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
@@ -7,14 +7,12 @@ import routes from './routes';
 
 import http from "http";
 import { Server } from "socket.io";
-import { startLiveSocket } from "./services/liveSocketService";
-
-
 
 
 dotenv.config();
 
-const app = express();
+const app: Application = express();
+const PORT = process.env.PORT || 5000;
 
 /* -------------------- MIDDLEWARE -------------------- */
 
@@ -33,10 +31,9 @@ app.get('/health', (_req, res) => {
 app.use('/api', routes);
 
 /* -------------------- 404 HANDLER -------------------- */
-app.use((req, res) => {
+app.use((req: Request, res: Response) => {
   res.status(404).json({
-    message: 'Route not found',
-    path: req.originalUrl,
+    message: 'Route not found'
   });
 });
 
@@ -61,6 +58,7 @@ io.on("connection", (socket) => {
 // startLiveSocket(io);
 
 
-app.listen(4000, () => {
-  console.log('Backend running on http://localhost:4000');
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 API endpoint: http://localhost:${PORT}/api/`);
 });
