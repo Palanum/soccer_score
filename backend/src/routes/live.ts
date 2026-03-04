@@ -1,22 +1,18 @@
-// backend/src/routes/live.ts
-import express, { Request, Response, Router } from 'express';
-import * as footballAPI from '../lib/apiFootball';
-import { withLock } from '../utils/withlock';
-import  cache  from '../utils/cache';
-const router: Router = express.Router();
+import { Router, Request, Response } from 'express';
+import { getLiveMatches } from '../lib/apiFootball';
 
-router.get('/live', async (req: Request, res: Response): Promise<void> => {
+const router = Router();
+
+// GET /api/live
+router.get('/', async (_req: Request, res: Response) => {
   try {
-    const data = await withLock('live_matches', () =>
-      footballAPI.getLiveMatches()
-    );
+    const data = await getLiveMatches();
     res.json(data);
   } catch (error) {
-    console.error('Error in /live route:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch live matches',
-      message: error instanceof Error ? error.message : 'Unknown error'
+    res.status(500).json({
+      message: 'Failed to fetch live matches',
     });
   }
 });
+
 export default router;

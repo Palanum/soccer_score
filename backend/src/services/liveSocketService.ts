@@ -25,11 +25,18 @@ type TypedSocket = Socket<
   SocketData
 >;
 
+const LIVE_ROOM = 'live_room';
+
+// Production-safe polling interval
+const POLL_INTERVAL =
+  process.env.NODE_ENV === 'production'
+    ? 15000 // 15s in production (paid tier ready)
+    : 60000; // 60s in development
+
 class SocketService {
   private io: SocketServer | null = null;
   private liveMatchInterval: NodeJS.Timeout | null = null;
-  private fixtureIntervals: Map<string, NodeJS.Timeout> = new Map();
-  private subscribedClients: Set<string> = new Set();
+  private lastLiveHash: string = '';
 
   initialize(httpServer: HTTPServer): SocketServer {
     this.io = new Server(httpServer, {
@@ -43,8 +50,9 @@ class SocketService {
     });
 
     this.setupEventHandlers();
-    this.startLiveMatchUpdates();
+    this.startLiveMatchPolling();
 
+    console.log('✓ Socket server initialized');
     return this.io;
   }
 
@@ -54,30 +62,30 @@ class SocketService {
     this.io.on('connection', (socket: TypedSocket) => {
       console.log(`✓ Client connected: ${socket.id}`);
 
-      // Send welcome message
       socket.emit('connected', {
         message: 'Connected to Football Live Score Server',
         connectedClients: this.io!.sockets.sockets.size,
       });
 
-      // Handle live matches subscription
-      socket.on('subscribeToLive', () => {
-        this.subscribedClients.add(socket.id);
-        console.log(`Client ${socket.id} subscribed to live updates`);
-        
-        // Send current live matches immediately
-        this.sendLiveMatches();
+      // Subscribe to live matches
+      socket.on('subscribeToLive', async () => {
+        socket.join(LIVE_ROOM);
+        console.log(`Client ${socket.id} joined live room`);
+
+        // Send immediate snapshot
+        await this.sendLiveMatches();
       });
 
       socket.on('unsubscribeFromLive', () => {
-        this.subscribedClients.delete(socket.id);
-        console.log(`Client ${socket.id} unsubscribed from live updates`);
+        socket.leave(LIVE_ROOM);
+        console.log(`Client ${socket.id} left live room`);
       });
 
-      // Handle fixtures request
+      // Request fixtures by date
       socket.on('requestFixtures', async (date: string) => {
         try {
           const data = await footballAPI.getFixturesByDate(date);
+
           socket.emit('fixturesUpdate', {
             date,
             matches: data.response,
@@ -89,7 +97,7 @@ class SocketService {
         }
       });
 
-      // Handle leagues request
+      // Request leagues
       socket.on('requestLeagues', async () => {
         try {
           const data = await footballAPI.getLeagues();
@@ -101,82 +109,99 @@ class SocketService {
         }
       });
 
-      // Handle disconnection
       socket.on('disconnect', () => {
-        this.subscribedClients.delete(socket.id);
         console.log(`✗ Client disconnected: ${socket.id}`);
-        console.log(`Active connections: ${this.io!.sockets.sockets.size}`);
+        console.log(
+          `Active connections: ${this.io!.sockets.sockets.size}`
+        );
       });
     });
   }
 
-  // Fetch and broadcast live matches every 60 seconds
-  private startLiveMatchUpdates(): void {
-    // Initial fetch
-    this.sendLiveMatches();
+  // Start polling live matches
+  private startLiveMatchPolling(): void {
+    if (this.liveMatchInterval) return;
 
-    // Set up interval for updates
-    this.liveMatchInterval = setInterval(() => {
-      if (this.subscribedClients.size > 0) {
-        this.sendLiveMatches();
-      } else {
-        console.log('No clients subscribed, skipping live match update');
+    this.liveMatchInterval = setInterval(async () => {
+      if (!this.io) return;
+
+      const roomSize =
+        this.io.sockets.adapter.rooms.get(LIVE_ROOM)?.size || 0;
+
+      if (roomSize === 0) {
+        console.log('No clients in live room, skipping API call');
+        return;
       }
-    }, 600); // 60 seconds
 
-    console.log('✓ Live match updates started (60s interval)');
+      await this.sendLiveMatches();
+    }, POLL_INTERVAL);
+
+    console.log(
+      `✓ Live polling started (${POLL_INTERVAL / 1000}s interval)`
+    );
   }
 
+  // Fetch + broadcast live matches (only if changed)
   private async sendLiveMatches(): Promise<void> {
     try {
       const data = await footballAPI.getLiveMatches();
       const matches = data.response;
 
-      if (this.io && this.subscribedClients.size > 0) {
-        this.io.emit('liveMatchesUpdate', matches);
+      const newHash = JSON.stringify(matches);
+
+      if (newHash === this.lastLiveHash) {
+        console.log('No live match changes');
+        return;
+      }
+
+      this.lastLiveHash = newHash;
+
+      if (this.io) {
+        this.io.to(LIVE_ROOM).emit('liveMatchesUpdate', matches);
         console.log(
-          `✓ Broadcast ${matches.length} live matches to ${this.subscribedClients.size} clients`
+          `✓ Broadcast ${matches.length} live matches`
         );
       }
     } catch (error) {
       console.error('Error fetching live matches:', error);
+
       if (this.io) {
-        this.io.emit('error', {
+        this.io.to(LIVE_ROOM).emit('error', {
           message: 'Failed to fetch live matches',
         });
       }
     }
   }
 
-  // Broadcast fixtures update for a specific date
+  // Manual broadcast for specific date (admin use)
   public async broadcastFixtures(date: string): Promise<void> {
     if (!this.io) return;
 
     try {
       const data = await footballAPI.getFixturesByDate(date);
+
       this.io.emit('fixturesUpdate', {
         date,
         matches: data.response,
       });
+
       console.log(`✓ Broadcast fixtures for ${date}`);
     } catch (error) {
       console.error('Error broadcasting fixtures:', error);
     }
   }
 
-  // Get connected clients count
   public getConnectedClientsCount(): number {
     return this.io ? this.io.sockets.sockets.size : 0;
   }
 
-  // Cleanup
   public cleanup(): void {
     if (this.liveMatchInterval) {
       clearInterval(this.liveMatchInterval);
+      this.liveMatchInterval = null;
     }
-    this.fixtureIntervals.forEach((interval) => clearInterval(interval));
-    this.fixtureIntervals.clear();
-    this.subscribedClients.clear();
+
+    this.lastLiveHash = '';
   }
 }
 
