@@ -3,6 +3,7 @@ import axios, { AxiosInstance } from 'axios';
 
 import cache from '../utils/cache';
 import { APIResponse, Match, League } from '../types/football.types';
+import { getSeason } from "../config/season";
 
 const API_KEY = process.env.FOOTBALL_API_KEY || '';
 const BASE_URL = 'https://v3.football.api-sports.io';
@@ -10,8 +11,7 @@ const BASE_URL = 'https://v3.football.api-sports.io';
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
-    'x-rapidapi-key': API_KEY,
-    'x-rapidapi-host': 'v3.football.api-sports.io'
+    "x-apisports-key": API_KEY
   },
   timeout: 10000
 });
@@ -53,6 +53,7 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
 
 /* ====================================================
    🔥 LIVE MATCHES (SHORT CACHE - IMPORTANT)
@@ -183,9 +184,10 @@ export async function getLeagues(): Promise<
    🏟 FIXTURES BY LEAGUE
 ==================================================== */
 export async function getFixturesByLeague(
-  leagueId: number,
-  season: number
+  leagueId: number
 ): Promise<APIResponse<Match[]>> {
+  const season = getSeason();
+
   const cacheKey = `fixtures_league_${leagueId}_${season}`;
   const cached = cache.get<APIResponse<Match[]>>(cacheKey);
 
@@ -196,7 +198,7 @@ export async function getFixturesByLeague(
   try {
     const response = await apiClient.get<
       APIResponse<Match[]>
-    >('/fixtures', {
+    >("/fixtures", {
       params: {
         league: leagueId,
         season,
@@ -205,10 +207,11 @@ export async function getFixturesByLeague(
 
     const data = response.data;
 
-    cache.set(cacheKey, data, 60 * 60 * 1000); // 1 hour
+    cache.set(cacheKey, data, 60 * 60 * 1000);
 
     return data;
-  } catch (error) {
-    throw new Error('Failed to fetch league fixtures');
+  } catch (error: any) {
+    console.error("API ERROR:", error?.response?.data);
+    throw new Error("Failed to fetch league fixtures");
   }
 }

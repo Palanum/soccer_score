@@ -1,18 +1,18 @@
-import { Router, Request, Response } from 'express';
-import { getLeagues } from '../lib/apiFootball';
+// backend/src/routes/leagues.ts
+import express, { Request, Response, Router } from 'express';
+import * as footballAPI from '../lib/apiFootball';
+const router: Router = express.Router();
 
-const router = Router();
-
-// GET /api/leagues
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/leagues', async (req: Request, res: Response): Promise<void> => {
   try {
-    const data = await getLeagues();
+    const data = await footballAPI.getLeagues();
     res.json(data);
   } catch (error) {
-    res.status(500).json({
-      message: 'Failed to fetch leagues',
+    console.error('Error in /leagues route:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch leagues',
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
-
 export default router;

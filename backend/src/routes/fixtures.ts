@@ -11,11 +11,10 @@ const router = Router();
 GET /api/fixtures?date=2026-03-03
 */
 router.get('/', async (req: Request, res: Response) => {
-  const { date, from, to, league, season } = req.query;
+  const { date, from, to, league } = req.query;
 
   try {
-    // Date
-    console.log(date);
+    // Single date
     if (date) {
       const data = await getFixturesByDate(date as string);
       return res.json(data);
@@ -30,12 +29,13 @@ router.get('/', async (req: Request, res: Response) => {
       return res.json(data);
     }
 
-    // League + season
-    if (league && season) {
+    // League (season auto resolved)
+    if (league) {
+
       const data = await getFixturesByLeague(
-        Number(league),
-        Number(season)
+        Number(league)
       );
+
       return res.json(data);
     }
 
@@ -43,10 +43,10 @@ router.get('/', async (req: Request, res: Response) => {
       message: 'Invalid query parameters',
     });
   } catch (error) {
+    console.error('Fixtures route error:', error);
+
     return res.status(500).json({
       message: 'Failed to fetch fixtures',
     });
   }
 });
-
-export default router;
