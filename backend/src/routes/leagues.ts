@@ -7,6 +7,7 @@ router.get('/leagues', async (req: Request, res: Response): Promise<void> => {
   try {
     const data = await footballAPI.getLeagues();
     res.json(data);
+    console.dir(data);
   } catch (error) {
     console.error('Error in /leagues route:', error);
     res.status(500).json({ 
